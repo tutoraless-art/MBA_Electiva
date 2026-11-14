@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RetailOps BI — Dashboard Operacional & Analítico</title>
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- PapaParse para carga opcional del CSV real -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#162032',
+              900: '#0f172a',
+              950: '#080d1a',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Custom Range Sliders */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 16px;
+      width: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      margin-top: -6px;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      cursor: pointer;
+      background: #334155;
+      border-radius: 2px;
+    }
+
+    .glass-card {
+      background: rgba(30, 41, 59, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.7);
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+    }
+
+    .kpi-card-transition {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-3.5">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+          <i data-lucide="activity" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">RetailOps Command Center</h1>
+            <span id="dataBadge" class="px-2 py-0.5 text-[11px] font-mono font-semibold rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              DATASET: 1,500 REGISTROS (2023–2026)
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Monitoreo Comercial, Rentabilidad Logística y Control de Anomalías</p>
+        </div>
+      </div>
+
+      <!-- Global Controls & CSV Upload -->
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Filtros rápidos -->
+        <select id="filterCity" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500">
+          <option value="ALL">Todas las Ciudades (4)</option>
+          <option value="Barranquilla">Barranquilla</option>
+          <option value="Bogota">Bogotá</option>
+          <option value="Medellin">Medellín</option>
+          <option value="Cali">Cali</option>
+        </select>
+
+        <select id="filterSegment" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500">
+          <option value="ALL">Todos los Segmentos</option>
+          <option value="Retail Individual">Retail Individual</option>
+          <option value="B2B Corporativo">B2B Corporativo</option>
+          <option value="VIP">VIP</option>
+        </select>
+
+        <select id="filterChannel" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500">
+          <option value="ALL">Todos los Canales</option>
+          <option value="Tienda Fisica">Tienda Física</option>
+          <option value="Online">Online</option>
+        </select>
+
+        <!-- Cargar CSV real si el usuario lo tiene en disco -->
+        <label class="cursor-pointer flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium px-3 py-2 rounded-lg transition">
+          <i data-lucide="upload" class="w-3.5 h-3.5 text-sky-400"></i>
+          <span>Cargar CSV Real</span>
+          <input type="file" id="csvUpload" accept=".csv" class="hidden" />
+        </label>
+
+        <button id="resetBtn" class="flex items-center gap-1.5 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-medium px-3 py-2 rounded-lg transition">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          <span>Reiniciar</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto px-6 py-6 space-y-6">
+
+    <!-- PANEL DE CONTROL INTERACTIVO (SLIDERS DE TIEMPO, VOLUMEN, LIMPIEZA Y TOLERANCIA) -->
+    <section class="glass-card rounded-2xl p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-700/70">
+        <div class="flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-sky-400"></i>
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">Panel de Control Operacional & Reglas de Tolerancia</h2>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-300 select-none">
+            <input type="checkbox" id="excludeReturns" checked class="rounded bg-slate-800 border-slate-600 text-sky-500 focus:ring-0" />
+            <span>Aislar devoluciones (<span class="font-mono text-rose-400">Cant &lt; 0</span>)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-slate-300 select-none">
+            <input type="checkbox" id="excludeOutliers" checked class="rounded bg-slate-800 border-slate-600 text-sky-500 focus:ring-0" />
+            <span>Filtrar outliers extremos (<span class="font-mono text-amber-400">Cant &gt; 100</span>)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Slider 1: Horizonte Temporal (Meses desde Ene 2023) -->
+        <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="calendar" class="w-3.5 h-3.5 text-sky-400"></i> Horizonte Temporal
+            </span>
+            <span id="timeSliderLabel" class="text-xs font-mono font-semibold text-sky-400">Ene 2023 – Jul 2026</span>
+          </div>
+          <input type="range" id="timeSlider" min="3" max="43" value="43" />
+          <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+            <span>3 Meses</span>
+            <span>24 Meses</span>
+            <span>43 Meses (Total)</span>
+          </div>
+        </div>
+
+        <!-- Slider 2: Control de Volumen Mínimo por Orden -->
+        <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="package" class="w-3.5 h-3.5 text-indigo-400"></i> Volumen Mín. / Orden
+            </span>
+            <span id="volSliderLabel" class="text-xs font-mono font-semibold text-indigo-400">≥ 1 unidad</span>
+          </div>
+          <input type="range" id="volSlider" min="1" max="20" value="1" />
+          <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+            <span>1 ud.</span>
+            <span>10 uds.</span>
+            <span>20 uds.</span>
+          </div>
+        </div>
+
+        <!-- Slider 3: Tolerancia de Margen Neto Mínimo (%) -->
+        <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-emerald-400"></i> Tolerancia Margen Neto
+            </span>
+            <span id="marginTolLabel" class="text-xs font-mono font-semibold text-emerald-400">Meta ≥ 32.0%</span>
+          </div>
+          <input type="range" id="marginTolSlider" min="15" max="50" step="0.5" value="32" />
+          <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+            <span>15%</span>
+            <span>32%</span>
+            <span>50%</span>
+          </div>
+        </div>
+
+        <!-- Slider 4: Tolerancia CSAT / Calificación Mínima -->
+        <div class="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="star" class="w-3.5 h-3.5 text-amber-400"></i> Tolerancia Satisfacción
+            </span>
+            <span id="csatTolLabel" class="text-xs font-mono font-semibold text-amber-400">Meta ≥ 3.00 / 5.0</span>
+          </div>
+          <input type="range" id="csatTolSlider" min="2.0" max="4.5" step="0.1" value="3.0" />
+          <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+            <span>2.0 ★</span>
+            <span>3.0 ★</span>
+            <span>4.5 ★</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BLOQUE 1: TARJETAS DE KPI DINÁMICAS (CAMBIAN VERDE <-> ROJO SEGÚN TOLERANCIA) -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <!-- KPI 1: Ingresos Totales -->
+      <div id="kpiCardRevenue" class="kpi-card-transition glass-card rounded-2xl p-5 border-l-4 border-emerald-500">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Ingresos Totales</p>
+            <h3 id="kpiRevenue" class="text-2xl font-bold font-mono mt-1 text-white">$0</h3>
+          </div>
+          <span id="kpiBadgeRevenue" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/20 text-emerald-400">EN META</span>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <span id="kpiTxCount">0 transacciones válidas</span>
+          <span id="kpiRevenueTarget" class="font-mono text-[11px]">Umbral: $1.8M</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: Utilidad Neta y Margen % -->
+      <div id="kpiCardMargin" class="kpi-card-transition glass-card rounded-2xl p-5 border-l-4 border-emerald-500">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Utilidad & Margen Neto</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <h3 id="kpiProfit" class="text-2xl font-bold font-mono text-white">$0</h3>
+              <span id="kpiMarginPct" class="text-sm font-mono font-bold text-emerald-400">0.0%</span>
+            </div>
+          </div>
+          <span id="kpiBadgeMargin" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/20 text-emerald-400">ÓPTIMO</span>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <span>Desc. prod. + envío</span>
+          <span id="kpiMarginTarget" class="font-mono text-[11px]">Tol: ≥32.0%</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: Ticket Promedio -->
+      <div id="kpiCardTicket" class="kpi-card-transition glass-card rounded-2xl p-5 border-l-4 border-emerald-500">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Ticket Promedio</p>
+            <h3 id="kpiTicket" class="text-2xl font-bold font-mono mt-1 text-white">$0</h3>
+          </div>
+          <span id="kpiBadgeTicket" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/20 text-emerald-400">SALUDABLE</span>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <span id="kpiAvgDiscount">Desc. prom: 0%</span>
+          <span class="font-mono text-[11px]">Tol: ≥$1,800</span>
+        </div>
+      </div>
+
+      <!-- KPI 4: Volumen Unidades y Tasa Devolución -->
+      <div id="kpiCardUnits" class="kpi-card-transition glass-card rounded-2xl p-5 border-l-4 border-emerald-500">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Unidades Vendidas</p>
+            <h3 id="kpiUnits" class="text-2xl font-bold font-mono mt-1 text-white">0</h3>
+          </div>
+          <span id="kpiBadgeUnits" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/20 text-emerald-400">ACTIVO</span>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <span id="kpiReturnRate" class="text-amber-400">Devoluciones: 0</span>
+          <span id="kpiOutlierCount" class="font-mono text-[11px]">Outliers: 0</span>
+        </div>
+      </div>
+
+      <!-- KPI 5: Calificación Cliente (CSAT) -->
+      <div id="kpiCardCsat" class="kpi-card-transition glass-card rounded-2xl p-5 border-l-4 border-emerald-500">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Calificación Cliente</p>
+            <div class="flex items-baseline gap-1.5 mt-1">
+              <h3 id="kpiCsat" class="text-2xl font-bold font-mono text-white">0.00</h3>
+              <span class="text-xs text-slate-400">/ 5.0</span>
+            </div>
+          </div>
+          <span id="kpiBadgeCsat" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/20 text-emerald-400">EN META</span>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <span id="kpiNullCsat">Sin calif: 30%</span>
+          <span id="kpiCsatTarget" class="font-mono text-[11px]">Tol: ≥3.00</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- BLOQUE 2: EVOLUCIÓN TEMPORAL Y ELASTICIDAD DE DESCUENTOS -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Gráfico de Área/Línea: Ingresos vs Utilidad Neta -->
+      <div class="lg:col-span-7 glass-card rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 class="text-base font-semibold text-white">Evolución Temporal: Ingresos vs. Utilidad Neta</h3>
+            <p class="text-xs text-slate-400">Tendencia trimestral de Venta Total frente al margen real después de costos</p>
+          </div>
+          <span class="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 text-sky-400 border border-slate-700">2023 Q1 – 2026 Q3</span>
+        </div>
+        <div class="h-72">
+          <canvas id="chartTemporal"></canvas>
+        </div>
+      </div>
+
+      <!-- Gráfico Combinado: Volumen Transacciones vs Descuento Promedio -->
+      <div class="lg:col-span-5 glass-card rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 class="text-base font-semibold text-white">Efectividad Promocional</h3>
+            <p class="text-xs text-slate-400">Transacciones (barras) vs. Descuento Promedio % (línea)</p>
+          </div>
+          <span class="text-xs font-mono px-2.5 py-1 rounded bg-slate-800 text-amber-400 border border-slate-700">Elasticidad</span>
+        </div>
+        <div class="h-72">
+          <canvas id="chartCombo"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- BLOQUE 3: DESEMPEÑO COMERCIAL POR CATEGORÍA, SEGMENTO Y CANAL -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Barras Horizontales: Ventas y Rentabilidad por Categoría -->
+      <div class="lg:col-span-5 glass-card rounded-2xl p-5">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-white">Desempeño por Categoría de Producto</h3>
+          <p class="text-xs text-slate-400">Comparativa de ingresos brutos y utilidad neta por línea</p>
+        </div>
+        <div class="h-64">
+          <canvas id="chartCategories"></canvas>
+        </div>
+      </div>
+
+      <!-- Barras Agrupadas: Segmento de Cliente por Canal de Venta -->
+      <div class="lg:col-span-4 glass-card rounded-2xl p-5">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-white">Segmento vs. Canal de Venta</h3>
+          <p class="text-xs text-slate-400">Contribución B2B, VIP y Retail en Tienda vs. Online</p>
+        </div>
+        <div class="h-64">
+          <canvas id="chartSegmentChannel"></canvas>
+        </div>
+      </div>
+
+      <!-- Donut Chart: Participación Canal de Venta -->
+      <div class="lg:col-span-3 glass-card rounded-2xl p-5 flex flex-col justify-between">
+        <div>
+          <h3 class="text-base font-semibold text-white">Mix de Canales</h3>
+          <p class="text-xs text-slate-400">Proporción de ingresos por canal</p>
+        </div>
+        <div class="h-48 my-auto">
+          <canvas id="chartChannelDonut"></canvas>
+        </div>
+        <div id="channelSummaryText" class="text-xs text-center text-slate-400 font-mono pt-2 border-t border-slate-800">
+          Cargando distribución...
+        </div>
+      </div>
+    </section>
+
+    <!-- BLOQUE 4: ANÁLISIS GEOGRÁFICO, LOGÍSTICO Y DISPERSIÓN DE MARGEN -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Barras por Ciudad: Ingresos vs Costo Promedio de Envío -->
+      <div class="lg:col-span-5 glass-card rounded-2xl p-5">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-white">Geografía y Eficiencia Logística</h3>
+          <p class="text-xs text-slate-400">Ingresos totales y costo promedio de envío por plaza</p>
+        </div>
+        <div class="h-64">
+          <canvas id="chartCities"></canvas>
+        </div>
+      </div>
+
+      <!-- Scatter Plot: Descuento Aplicado vs Utilidad Neta por Segmento -->
+      <div class="lg:col-span-7 glass-card rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 class="text-base font-semibold text-white">Dispersión: Descuento Aplicado vs. Utilidad por Orden</h3>
+            <p class="text-xs text-slate-400">Detección de erosionamiento de margen por descuentos excesivos (0% – 50%)</p>
+          </div>
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">Muestra operativa</span>
+        </div>
+        <div class="h-64">
+          <canvas id="chartScatter"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- BLOQUE 5: CALIDAD DE SERVICIO, INCIDENCIAS Y RANKING DE VENDEDORES -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Histograma Calificación Cliente -->
+      <div class="lg:col-span-4 glass-card rounded-2xl p-5">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-white">Distribución CSAT (1 a 5 ★)</h3>
+          <p class="text-xs text-slate-400">Detractores (1–2.5) vs. Neutros (3–3.9) vs. Promotores (4–5)</p>
+        </div>
+        <div class="h-60">
+          <canvas id="chartCsatDist"></canvas>
+        </div>
+      </div>
+
+      <!-- Barras de Incidencias Operativas (Detalle_Venta) -->
+      <div class="lg:col-span-4 glass-card rounded-2xl p-5">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-white">Incidencias y Novedades Operativas</h3>
+          <p class="text-xs text-slate-400">Frecuencia de observaciones registradas (excluye nulos)</p>
+        </div>
+        <div class="h-60">
+          <canvas id="chartIncidents"></canvas>
+        </div>
+      </div>
+
+      <!-- Ranking Equipo Comercial -->
+      <div class="lg:col-span-4 glass-card rounded-2xl p-5">
+        <div class="mb-4">
+          <h3 class="text-base font-semibold text-white">Top Fuerza Comercial</h3>
+          <p class="text-xs text-slate-400">Ingresos generados por ejecutivo de ventas</p>
+        </div>
+        <div class="h-60">
+          <canvas id="chartSellers"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- BLOQUE 6: TABLA DINÁMICA DE DETALLE OPERATIVO Y ALERTAS DE ANOMALÍAS -->
+    <section class="glass-card rounded-2xl p-5">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div>
+          <h3 class="text-base font-semibold text-white flex items-center gap-2">
+            <i data-lucide="table" class="w-4 h-4 text-sky-400"></i>
+            Auditoría de Transacciones, Top Clientes y Anomalías
+          </h3>
+          <p class="text-xs text-slate-400">Incluye alertas automáticas para devoluciones, outliers de cantidad (&gt;100 uds.) y márgenes negativos</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="tableFilterMode" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500">
+            <option value="ALL">Mostrar: Todas las órdenes filtradas</option>
+            <option value="ANOMALIES">Solo Anomalías (Devoluciones / Outliers / Pérdidas)</option>
+            <option value="TOP_VALUE">Top Transacciones por Ingreso</option>
+          </select>
+          <input type="text" id="tableSearch" placeholder="Buscar cliente, ID o ciudad..." class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 w-56 focus:outline-none focus:border-sky-500" />
+        </div>
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-slate-800">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-900/90 text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+              <th class="py-3 px-4">ID / Fecha</th>
+              <th class="py-3 px-4">Cliente & Segmento</th>
+              <th class="py-3 px-4">Ciudad / Canal</th>
+              <th class="py-3 px-4">Categoría</th>
+              <th class="py-3 px-4 text-right">Cant.</th>
+              <th class="py-3 px-4 text-right">Desc.</th>
+              <th class="py-3 px-4 text-right">Venta Total</th>
+              <th class="py-3 px-4 text-right">Utilidad Neta</th>
+              <th class="py-3 px-4 text-center">CSAT</th>
+              <th class="py-3 px-4">Estado / Observación</th>
+            </tr>
+          </thead>
+          <tbody id="transactionsTableBody" class="divide-y divide-slate-800/70 text-xs">
+            <!-- Filas inyectadas dinámicamente -->
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-3 flex justify-between items-center text-xs text-slate-400">
+        <span id="tableShowingInfo">Mostrando 15 registros</span>
+        <span class="font-mono text-[11px] text-slate-500">RetailOps Engine v2.4 • Datos limpios en tiempo real</span>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // 1. MOTOR DE DATOS (SINTÉTICO FIEL AL EDA DE 1,500 FILAS + PARSER CSV REAL)
+    // =========================================================================
+    let rawDataset = [];
+    let charts = {};
+
+    const CITIES = ['Barranquilla', 'Bogota', 'Medellin', 'Cali'];
+    const CATEGORIES = ['Tecnologia', 'Deportes', 'Moda', 'Hogar'];
+    const SEGMENTS = ['Retail Individual', 'B2B Corporativo', 'VIP'];
+    const CHANNELS = ['Tienda Fisica', 'Online'];
+    const SELLERS = ['Ana R.', 'Carlos Mendoza', 'Sofia L.', 'Maria K.', 'Pedro Torres', 'Javier Gomez', 'Elena P.', 'Luis Fernandez'];
+    const CLIENTS = [
+      'Log
